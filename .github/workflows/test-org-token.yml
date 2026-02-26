@@ -1,0 +1,49 @@
+name: Test ORG_READ_TOKEN
+
+on:
+  push:
+    branches-ignore:
+      - master
+
+jobs:
+  test_token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test org membership check with ORG_READ_TOKEN
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.ORG_READ_TOKEN }}
+          script: |
+            const testUser = 'asanso';
+
+            // Test 1: Direct membership check
+            try {
+              await github.rest.orgs.checkMembershipForUser({
+                org: 'ethereum',
+                username: testUser
+              });
+              console.log(`✅ Direct membership check: ${testUser} is a member of ethereum`);
+            } catch (error) {
+              console.log(`❌ Direct membership check failed: ${error.message}`);
+            }
+
+            // Test 2: List members (includes private if token has read:org)
+            try {
+              const members = [];
+              for await (const response of github.paginate.iterator(
+                github.rest.orgs.listMembers,
+                { org: 'ethereum', per_page: 100 }
+              )) {
+                for (const member of response.data) {
+                  members.push(member.login.toLowerCase());
+                }
+              }
+              console.log(`Total members visible: ${members.length}`);
+              if (members.includes(testUser.toLowerCase())) {
+                console.log(`✅ List members check: ${testUser} found in full member list`);
+              } else {
+                console.log(`❌ List members check: ${testUser} NOT found`);
+              }
+            } catch (error) {
+              console.log(`❌ List members failed: ${error.message}`);
+            }
