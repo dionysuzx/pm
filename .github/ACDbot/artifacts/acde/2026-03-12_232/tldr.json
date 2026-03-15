@@ -1,0 +1,186 @@
+{
+  "meeting": "ACDE #232 - March 12, 2026",
+  "highlights": {
+    "fork_status_and_schedule": [
+      {
+        "timestamp": "00:23:36",
+        "highlight": "Hegot\u00e1 headliner decision delayed two weeks due to split client support"
+      },
+      {
+        "timestamp": "01:33:40",
+        "highlight": "Non-headliner proposal window opens after headliner decision finalized"
+      }
+    ],
+    "glamsterdam_devnet_updates": [
+      {
+        "timestamp": "00:07:30",
+        "highlight": "BAL DevNet 2 stable; only Erigon remaining to join block production"
+      },
+      {
+        "timestamp": "00:08:34",
+        "highlight": "Prefetch benchmarks show no-prefetch currently faster than with-prefetch on average case"
+      },
+      {
+        "timestamp": "00:09:36",
+        "highlight": "BAL DevNet 3 delayed; most clients not ready for EIP-8037 yet"
+      },
+      {
+        "timestamp": "00:09:50",
+        "highlight": "Test release 5.4.0 available; clients should verify test compatibility"
+      }
+    ],
+    "repricing_and_state_growth": [
+      {
+        "timestamp": "00:10:11",
+        "highlight": "EIP-8037 complexity concerns raised by Erigon, Nethermind, Reth teams"
+      },
+      {
+        "timestamp": "00:11:48",
+        "highlight": "Andrew proposes coherent three-dimensional gas model: blob, state, computational"
+      },
+      {
+        "timestamp": "00:14:36",
+        "highlight": "Maria: EIP-8037 separates transaction pricing from block resource limits"
+      },
+      {
+        "timestamp": "00:19:30",
+        "highlight": "Ansgar: Full gas rework infeasible for Glamsterdam timeline"
+      },
+      {
+        "timestamp": "00:22:48",
+        "highlight": "Repricing breakout next Wednesday to discuss EIP-8037 simplifications"
+      }
+    ],
+    "epbs_progress": [
+      {
+        "timestamp": "00:33:14",
+        "highlight": "ePBS DevNet 0 stable one week; Lighthouse, Lodestar, Prysm working"
+      },
+      {
+        "timestamp": "00:34:00",
+        "highlight": "Only Geth on EL side; seeking second EL client for DevNet"
+      },
+      {
+        "timestamp": "00:35:08",
+        "highlight": "Marius: EL implementation takes ~1 hour for ePBS DevNet 0"
+      }
+    ],
+    "frame_transactions_debate": [
+      {
+        "timestamp": "00:43:41",
+        "highlight": "Felix: Frame transactions enable account abstraction with mempool compatibility"
+      },
+      {
+        "timestamp": "00:46:24",
+        "highlight": "Dragan: Reth prefers no headliner; frame transactions over-abstracted"
+      },
+      {
+        "timestamp": "00:46:50",
+        "highlight": "Lightclient: Txpool complexity adjustable; consensus changes relatively simple"
+      },
+      {
+        "timestamp": "00:48:10",
+        "highlight": "Barnabas: Not selecting as headliner risks wasting resources without delivery"
+      },
+      {
+        "timestamp": "00:57:15",
+        "highlight": "Vitalik: FOCIL and native AA highly synergistic for intermediary-free flow"
+      },
+      {
+        "timestamp": "01:02:09",
+        "highlight": "Nico: Post-quantum timeline tight; DAO upgrades need years even with frame txs"
+      },
+      {
+        "timestamp": "01:18:28",
+        "highlight": "Fredrik: Transaction assertions with frames critical for security, drainer protection"
+      },
+      {
+        "timestamp": "01:30:07",
+        "highlight": "Parithosh: ZK priorities in future forks; frame txs unlikely later if skipped now"
+      }
+    ],
+    "client_positions": [
+      {
+        "timestamp": "00:45:51",
+        "highlight": "Besu switched from Lucid preference to no-headliner position"
+      },
+      {
+        "timestamp": "00:46:06",
+        "highlight": "Nethermind prefers no headliner but team split; open to frame txs as EIP"
+      },
+      {
+        "timestamp": "00:47:11",
+        "highlight": "Reth supports no headliner; cites over-abstraction and simpler alternatives"
+      },
+      {
+        "timestamp": "00:50:37",
+        "highlight": "Erigon supports frame txs headliner; wants coordination with Lucid for compatibility"
+      },
+      {
+        "timestamp": "01:13:53",
+        "highlight": "Ahmad (Nethermind): Personal support for frame txs as headliner"
+      }
+    ],
+    "ssz_experiments": [
+      {
+        "timestamp": "00:40:15",
+        "highlight": "Nethermind open to Engine API SSZ as non-consensus change"
+      },
+      {
+        "timestamp": "00:41:47",
+        "highlight": "Negotiation via capabilities exchange; fallback to JSON if SSZ unsupported"
+      }
+    ],
+    "organizational": [
+      {
+        "timestamp": "00:40:15",
+        "highlight": "SSZ/Lucid headliner proposals rejected for Hegot\u00e1"
+      },
+      {
+        "timestamp": "01:26:32",
+        "highlight": "Felix commits to mempool rule prototypes within two weeks"
+      }
+    ]
+  },
+  "action_items": [
+    {
+      "timestamp": "00:22:48",
+      "action": "Discuss EIP-8037 alignment with EIP-7928 at repricing breakout next Wednesday",
+      "owner": "Repricing team, Andrew, Maria"
+    },
+    {
+      "timestamp": "01:26:32",
+      "action": "Develop prototype mempool rules and bring into EIP-8141 spec",
+      "owner": "Frame transaction champions (Felix, Geth team)"
+    },
+    {
+      "timestamp": "01:32:12",
+      "action": "Frame txs champions shore up client support over next two weeks",
+      "owner": "Felix, frame transaction champions"
+    }
+  ],
+  "decisions": [
+    {
+      "timestamp": "00:40:56",
+      "decision": "SSZ proposal rejected as Hegot\u00e1 headliner"
+    },
+    {
+      "timestamp": "00:41:05",
+      "decision": "Lucid rejected as Hegot\u00e1 headliner"
+    },
+    {
+      "timestamp": "01:33:40",
+      "decision": "Frame transactions headliner decision deferred two weeks for further discussion"
+    }
+  ],
+  "targets": [
+    {
+      "timestamp": "00:22:48",
+      "target": "Next Wednesday - Repricing breakout call on EIP-8037"
+    },
+    {
+      "timestamp": "01:33:40",
+      "target": "March 26, 2026 - Final decision on frame transactions headliner status"
+    }
+  ]
+}
