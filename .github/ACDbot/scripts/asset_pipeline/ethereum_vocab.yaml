@@ -86,13 +86,17 @@ error_patterns:
   - fossil: FOCIL
   - prism: Prysm
   - nevermind: Nethermind
+  - netherland: Nethermind
   - bezo: Besu
   - bass suit: Besu
   - aragon: Erigon
+  - aragon syncing: Erigon syncing
   - wrath: Reth
   - light house: Lighthouse
   - load star: Lodestar
   - lone star: Lodestar
+  - lighthouse/lone star/prism: Lighthouse/Lodestar/Prysm
+  - lighthouse, lone star, and prism: Lighthouse, Lodestar, and Prysm
   - take you: Teku
   - taku: Teku
   - grandee: Grandine
@@ -103,6 +107,8 @@ error_patterns:
   - e pbs: ePBS
   - s-s-z: SSZ
   - sse: SSZ
+  - sse/pure eth: SSZ/Pure ETH
+  - geth, aragon: Geth, Erigon
   - e-o-f: EOF
   - pectra: Pectra
   - few soccer: Fusaka
