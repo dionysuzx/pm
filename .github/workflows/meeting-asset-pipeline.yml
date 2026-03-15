@@ -11,11 +11,6 @@ on:
         description: "Optional: Call number (e.g., 226 for ACDE #226)"
         required: false
         type: string
-      ONLY_SUMMARY:
-        description: "Skip Zoom/YouTube and only rerun TLDR generation on existing artifacts"
-        required: false
-        default: false
-        type: boolean
 
   schedule:
     - cron: "0 * * * *" # Run every hour at minute 0
@@ -28,7 +23,6 @@ jobs:
       refresh_failed: 'false'
       INPUT_FORCE_SERIES: ${{ github.event.inputs.FORCE_SERIES }}
       INPUT_FORCE_NUMBER: ${{ github.event.inputs.FORCE_NUMBER }}
-      INPUT_ONLY_SUMMARY: ${{ github.event.inputs.ONLY_SUMMARY }}
 
     steps:
       - name: Check out code
@@ -46,7 +40,6 @@ jobs:
           pip install -r .github/ACDbot/requirements.txt
 
       - name: Refresh YouTube Token
-        if: ${{ github.event.inputs.ONLY_SUMMARY != 'true' }}
         env:
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
@@ -55,7 +48,6 @@ jobs:
           python .github/ACDbot/scripts/refresh_youtube_token.py || echo "refresh_failed=true" >> $GITHUB_ENV
 
       - name: Poll Zoom for recordings
-        if: ${{ github.event.inputs.ONLY_SUMMARY != 'true' }}
         run: |
           if [ -n "$INPUT_FORCE_SERIES" ] && [ -n "$INPUT_FORCE_NUMBER" ]; then
             # Look up meeting_id and issue_number from mapping file
@@ -109,7 +101,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ vars.TELEGRAM_CHAT_ID }}
 
       - name: Upload Zoom recordings to YouTube
-        if: ${{ github.event.inputs.ONLY_SUMMARY != 'true' }}
         continue-on-error: true
         run: |
           if [ -n "$INPUT_FORCE_SERIES" ]; then
@@ -150,7 +141,7 @@ jobs:
           MATTERMOST_BOT_WEBHOOK_URL: ${{ secrets.MATTERMOST_BOT_WEBHOOK_URL }}
 
       - name: Run asset pipeline
-        if: success() && github.event.inputs.ONLY_SUMMARY != 'true'
+        if: success()
         continue-on-error: true
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -171,21 +162,6 @@ jobs:
               python run_pipeline.py -c "$series" --recent --max-age-days 3 --auto-approve --summarize || true
             done
           fi
-
-      - name: Rerun summary only
-        if: success() && github.event.inputs.ONLY_SUMMARY == 'true'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: |
-          cd .github/ACDbot/scripts/asset_pipeline
-
-          if [ -z "$INPUT_FORCE_SERIES" ] || [ -z "$INPUT_FORCE_NUMBER" ]; then
-            echo "FORCE_SERIES and FORCE_NUMBER are required when ONLY_SUMMARY=true"
-            exit 1
-          fi
-
-          echo "Regenerating summary for $INPUT_FORCE_SERIES #$INPUT_FORCE_NUMBER..."
-          python generate_summary.py -c "$INPUT_FORCE_SERIES" -n "$INPUT_FORCE_NUMBER" --force
 
       - name: Generate manifest and commit all changes
         id: commit
