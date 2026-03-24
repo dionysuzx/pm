@@ -10,8 +10,8 @@ import sys
 import os
 import json
 import argparse
-import base64
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from urllib.parse import urlencode
 
 # Add the modules directory to the path
 modules_path = os.path.join('.github', 'ACDbot', 'modules')
@@ -90,6 +90,24 @@ def get_zoom_meeting_url(meeting_id):
         # Fallback to basic URL construction
         return f"https://zoom.us/j/{meeting_id}"
 
+
+def build_calendar_link(summary, start_time, duration_minutes, description=""):
+    """Build a Google Calendar add-event link for a specific occurrence."""
+    try:
+        start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+        end_dt = start_dt + timedelta(minutes=duration_minutes)
+    except Exception:
+        return None
+
+    params = {
+        "action": "TEMPLATE",
+        "text": summary,
+        "dates": f"{start_dt.strftime('%Y%m%dT%H%M%SZ')}/{end_dt.strftime('%Y%m%dT%H%M%SZ')}",
+    }
+    if description:
+        params["details"] = description
+    return f"https://www.google.com/calendar/render?{urlencode(params)}"
+
 def generate_comment(call_series, occurrence, mapping):
     """Generate the GitHub comment text."""
     issue_number = occurrence.get('issue_number')
@@ -100,6 +118,7 @@ def generate_comment(call_series, occurrence, mapping):
     # Get series-level meeting ID
     series_data = mapping.get(call_series, {})
     meeting_id = series_data.get('meeting_id')
+    issue_url = f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'ethereum/pm')}/issues/{issue_number}"
 
     comment_lines = [
         "🎉 **Protocol Call Resources:**",
@@ -136,13 +155,13 @@ def generate_comment(call_series, occurrence, mapping):
     # Calendar Event
     calendar_event_id = occurrence.get('calendar_event_id') or series_data.get('calendar_event_id')
     if calendar_event_id:
-        # Create proper Google Calendar link with encoded eid
-        import gcal
-        calendar_id = "c_upaofong8mgrmrkegn7ic7hk5s@group.calendar.google.com"  # From the logs
-        encoded_eid = gcal.encode_calendar_eid(calendar_event_id, calendar_id)
+        details_parts = [f"Issue: {issue_url}"]
+        if zoom_url:
+            details_parts.insert(0, f"Meeting: {zoom_url}")
 
-        if encoded_eid:
-            calendar_link = f"https://www.google.com/calendar/event?eid={encoded_eid}"
+        calendar_link = build_calendar_link(issue_title, start_time, duration, "\n\n".join(details_parts))
+
+        if calendar_link:
             comment_lines.append(f"✅ **Calendar**: [Add to Calendar]({calendar_link})")
         else:
             comment_lines.append("❌ **Calendar**: Failed to generate link")

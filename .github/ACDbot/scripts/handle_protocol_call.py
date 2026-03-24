@@ -11,11 +11,12 @@ import os
 import re
 import argparse
 from typing import Dict, Optional, List, Set
+from urllib.parse import urlencode
 
 # Add the modules directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'modules'))
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from modules.form_parser import FormParser
 from modules.mapping_manager import MappingManager
@@ -1517,6 +1518,23 @@ The bot will automatically process your issue once you've selected a valid call 
             print(f"[ERROR] Failed to find existing bot comment: {e}")
             return None
 
+    def _build_calendar_link(self, summary: str, start_time: str, duration_minutes: int, description: str = "") -> Optional[str]:
+        """Build a Google Calendar add-event link for a specific occurrence."""
+        try:
+            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            end_dt = start_dt + timedelta(minutes=duration_minutes)
+        except Exception:
+            return None
+
+        params = {
+            "action": "TEMPLATE",
+            "text": summary,
+            "dates": f"{start_dt.strftime('%Y%m%dT%H%M%SZ')}/{end_dt.strftime('%Y%m%dT%H%M%SZ')}",
+        }
+        if description:
+            params["details"] = description
+        return f"https://www.google.com/calendar/render?{urlencode(params)}"
+
     def _generate_comprehensive_resource_comment(self, call_data: Dict) -> Optional[str]:
         """Generate comprehensive resource comment with ALL current resources from mapping."""
         try:
@@ -1565,15 +1583,21 @@ The bot will automatically process your issue once you've selected a valid call 
             else:
                 comment_lines.append("❌ **Zoom**: No meeting link available")
 
-            # Calendar Event with proper eid encoding
+            # Calendar Event
             calendar_event_id = series_data.get('calendar_event_id')
             if calendar_event_id:
-                from modules import gcal
-                calendar_id = os.getenv("GCAL_ID")
-                encoded_eid = gcal.encode_calendar_eid(calendar_event_id, calendar_id)
+                details_parts = [f"Issue: {call_data['issue_url']}"]
+                if meeting_id and not str(meeting_id).startswith("placeholder") and meeting_id != "custom":
+                    if enhanced_url:
+                        details_parts.insert(0, f"Meeting: {enhanced_url}")
+                calendar_link = self._build_calendar_link(
+                    summary=occurrence.get('issue_title', call_data['issue_title']),
+                    start_time=occurrence.get('start_time'),
+                    duration_minutes=occurrence.get('duration', call_data.get('duration', 60)),
+                    description="\n\n".join(details_parts)
+                )
 
-                if encoded_eid:
-                    calendar_link = f"https://www.google.com/calendar/event?eid={encoded_eid}"
+                if calendar_link:
                     comment_lines.append(f"✅ **Calendar**: [Add to Calendar]({calendar_link})")
                 else:
                     comment_lines.append("❌ **Calendar**: Failed to generate link")
