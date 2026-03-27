@@ -11,18 +11,24 @@ import os
 import re
 import argparse
 from typing import Dict, Optional, List, Set
-from urllib.parse import urlencode
 
 # Add the modules directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'modules'))
 
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
+from pathlib import Path
 
 from modules.form_parser import FormParser
 from modules.mapping_manager import MappingManager
 from modules.datetime_utils import generate_savvytime_link, format_datetime_for_discourse, format_datetime_for_stream_display
 from modules.logging_config import get_logger, log_success, log_resource_status, log_api_call, should_log_debug
 from modules.call_series_config import get_autopilot_defaults, has_autopilot_support, get_default_autopilot_settings, get_one_off_autopilot_settings
+from modules.calendar_links import (
+    build_google_calendar_link,
+    build_ics_content,
+    build_occurrence_ics_artifact_path,
+    build_raw_github_url,
+)
 
 
 class ProtocolCallHandler:
@@ -32,6 +38,8 @@ class ProtocolCallHandler:
         self.form_parser = FormParser()
         self.mapping_manager = MappingManager()
         self.logger = get_logger()
+        self.repo_name = os.environ.get("GITHUB_REPOSITORY", "ethereum/pm")
+        self.default_branch = os.environ.get("GITHUB_DEFAULT_BRANCH", "master")
 
     def _apply_autopilot_defaults(self, form_data: Dict, issue) -> Dict:
         """
@@ -311,6 +319,7 @@ class ProtocolCallHandler:
     def handle_protocol_call(self, issue_number: int, repo_name: str) -> bool:
         """Main entry point for handling a protocol call issue."""
         try:
+            self.repo_name = repo_name
             self.logger.info(f"Starting protocol call handler for issue #{issue_number}")
 
             # 1. Get GitHub issue
@@ -1518,22 +1527,37 @@ The bot will automatically process your issue once you've selected a valid call 
             print(f"[ERROR] Failed to find existing bot comment: {e}")
             return None
 
-    def _build_calendar_link(self, summary: str, start_time: str, duration_minutes: int, description: str = "") -> Optional[str]:
-        """Build a Google Calendar add-event link for a specific occurrence."""
-        try:
-            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-            end_dt = start_dt + timedelta(minutes=duration_minutes)
-        except Exception:
+    def _write_occurrence_ics(
+        self,
+        call_series: str,
+        occurrence: Dict,
+        summary: str,
+        description: str,
+        issue_url: str,
+    ) -> Optional[str]:
+        occurrence_number = occurrence.get("occurrence_number")
+        start_time = occurrence.get("start_time")
+        duration_minutes = occurrence.get("duration")
+        issue_number = occurrence.get("issue_number")
+
+        if occurrence_number is None or not start_time or duration_minutes is None or issue_number is None:
             return None
 
-        params = {
-            "action": "TEMPLATE",
-            "text": summary,
-            "dates": f"{start_dt.strftime('%Y%m%dT%H%M%SZ')}/{end_dt.strftime('%Y%m%dT%H%M%SZ')}",
-        }
-        if description:
-            params["details"] = description
-        return f"https://www.google.com/calendar/render?{urlencode(params)}"
+        relative_path = build_occurrence_ics_artifact_path(call_series, start_time, occurrence_number)
+        ics_content = build_ics_content(
+            summary=summary,
+            start_time=start_time,
+            duration_minutes=duration_minutes,
+            description=description,
+            issue_url=issue_url,
+            uid=f"{self.repo_name.replace('/', '-')}-issue-{issue_number}@protocol-calls.ethereum.org",
+        )
+
+        output_path = Path(relative_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(ics_content, encoding="utf-8")
+
+        return build_raw_github_url(self.repo_name, self.default_branch, relative_path)
 
     def _generate_comprehensive_resource_comment(self, call_data: Dict) -> Optional[str]:
         """Generate comprehensive resource comment with ALL current resources from mapping."""
@@ -1588,15 +1612,37 @@ The bot will automatically process your issue once you've selected a valid call 
                 details_parts = [f"Issue: {call_data['issue_url']}"]
                 if call_data.get("display_zoom_link_in_invite") and zoom_url:
                     details_parts.insert(0, f"Meeting: {zoom_url}")
-                calendar_link = self._build_calendar_link(
-                    summary=occurrence.get('issue_title', call_data['issue_title']),
-                    start_time=occurrence.get('start_time'),
-                    duration_minutes=occurrence.get('duration', call_data.get('duration', 60)),
-                    description="\n\n".join(details_parts)
-                )
+                description = "\n\n".join(details_parts)
+                summary = occurrence.get('issue_title', call_data['issue_title'])
+
+                try:
+                    calendar_link = build_google_calendar_link(
+                        summary=summary,
+                        start_time=occurrence.get('start_time'),
+                        duration_minutes=occurrence.get('duration', call_data.get('duration', 60)),
+                        description=description
+                    )
+                except Exception:
+                    calendar_link = None
+
+                ics_link = None
+                if calendar_link:
+                    try:
+                        ics_link = self._write_occurrence_ics(
+                            call_series=call_series,
+                            occurrence=occurrence,
+                            summary=summary,
+                            description=description,
+                            issue_url=call_data['issue_url'],
+                        )
+                    except Exception as e:
+                        self.logger.error(f"Failed to write invite.ics for issue #{call_data['issue_number']}: {e}")
 
                 if calendar_link:
-                    comment_lines.append(f"✅ **Calendar**: [Add to Google Calendar]({calendar_link})")
+                    calendar_links = [f"[Add to Calendar]({calendar_link})"]
+                    if ics_link:
+                        calendar_links.append(f"[Download .ics]({ics_link})")
+                    comment_lines.append(f"✅ **Calendar**: {' | '.join(calendar_links)}")
                 else:
                     comment_lines.append("❌ **Calendar**: Failed to generate link")
             else:

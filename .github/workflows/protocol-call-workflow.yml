@@ -224,6 +224,7 @@ jobs:
             --repo "${{ github.repository }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           ZOOM_CLIENT_ID: ${{ secrets.ZOOM_CLIENT_ID }}
           ZOOM_CLIENT_SECRET: ${{ secrets.ZOOM_CLIENT_SECRET }}
           ZOOM_ACCOUNT_ID: ${{ secrets.ZOOM_ACCOUNT_ID }}
@@ -246,7 +247,7 @@ jobs:
           SENDER_EMAIL_PASSWORD: ${{ secrets.SENDER_EMAIL_PASSWORD }}
           SMTP_SERVER: ${{ secrets.SMTP_SERVER }}
 
-      - name: Commit mapping file
+      - name: Commit mapping and calendar artifacts
         if: always()
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -255,13 +256,13 @@ jobs:
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
 
-          if git diff --quiet .github/ACDbot/meeting_topic_mapping.json; then
-            echo "No changes to mapping file"
+          if [ -z "$(git status --porcelain -- .github/ACDbot/meeting_topic_mapping.json .github/ACDbot/artifacts)" ]; then
+            echo "No mapping or calendar artifact changes"
           else
-            git add .github/ACDbot/meeting_topic_mapping.json
+            git add .github/ACDbot/meeting_topic_mapping.json .github/ACDbot/artifacts
             git commit -m "Update mapping for issue $ISSUE_NUMBER"
             git push
-            echo "Committed mapping file changes"
+            echo "Committed mapping and calendar artifact changes"
           fi
 
 permissions:
