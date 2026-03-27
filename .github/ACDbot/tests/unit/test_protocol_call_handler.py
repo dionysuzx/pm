@@ -11,6 +11,7 @@ import sys
 import os
 import re
 import types
+import tempfile
 from urllib.parse import urlparse, parse_qs
 
 # Add the scripts directory to the path
@@ -518,6 +519,7 @@ bi-weekly
                 "issue_title": "Test Protocol Call",
                 "start_time": "2025-04-24T14:00:00Z",
                 "duration": 60,
+                "occurrence_number": 1,
                 "calendar_event_id": "calendar-event-id",
                 "discourse_topic_id": "12345",
             }
@@ -540,13 +542,20 @@ bi-weekly
             get_meeting_url_with_passcode=lambda _: 'https://zoom.us/j/987654321?pwd=secret'
         )
 
-        with unittest.mock.patch.object(self.handler.mapping_manager, 'find_occurrence', return_value=mock_occurrence_data), \
-             unittest.mock.patch.object(self.handler.mapping_manager, 'load_mapping', return_value=mock_mapping_data), \
-             unittest.mock.patch.dict(sys.modules, {'modules.zoom': fake_zoom}):
-            result = self.handler._generate_comprehensive_resource_comment(call_data)
+        original_cwd = os.getcwd()
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                os.chdir(tmpdir)
+                with unittest.mock.patch.object(self.handler.mapping_manager, 'find_occurrence', return_value=mock_occurrence_data), \
+                     unittest.mock.patch.object(self.handler.mapping_manager, 'load_mapping', return_value=mock_mapping_data), \
+                     unittest.mock.patch.dict(sys.modules, {'modules.zoom': fake_zoom}):
+                    result = self.handler._generate_comprehensive_resource_comment(call_data)
+        finally:
+            os.chdir(original_cwd)
 
         self.assertIsNotNone(result)
         self.assertIn("✅ **Zoom**: [Join Meeting](https://zoom.us/j/987654321?pwd=secret)", result)
+        self.assertIn("[Download .ics](", result)
 
         calendar_link = self._extract_google_calendar_link(result)
         params = parse_qs(urlparse(calendar_link).query)
@@ -567,6 +576,7 @@ bi-weekly
                 "issue_title": "Test Protocol Call",
                 "start_time": "2025-04-24T14:00:00Z",
                 "duration": 60,
+                "occurrence_number": 1,
                 "calendar_event_id": "calendar-event-id",
                 "discourse_topic_id": "12345",
             }
