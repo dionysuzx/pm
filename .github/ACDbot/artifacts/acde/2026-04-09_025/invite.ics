@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Ethereum PM//ACDbot//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:dionysuzx-pm-issue-11@protocol-calls.ethereum.org
+DTSTAMP:20260327T181142Z
+DTSTART:20260409T140000Z
+DTEND:20260409T153000Z
+SUMMARY:All Core Devs - Execution (ACDE) E2E test\, April 9\, 2026
+DESCRIPTION:Meeting: https://zoom.us/j/85451723466\n\nIssue: https://github.com/dionysuzx/pm/issues/11
+URL:https://github.com/dionysuzx/pm/issues/11
+END:VEVENT
+END:VCALENDAR
