@@ -10,12 +10,16 @@ import sys
 import os
 import json
 import argparse
-from datetime import datetime, timedelta
-from urllib.parse import urlencode
+from datetime import datetime
 
 # Add the modules directory to the path
 modules_path = os.path.join('.github', 'ACDbot', 'modules')
 sys.path.append(modules_path)
+from calendar_links import (
+    build_google_calendar_link,
+    build_occurrence_ics_artifact_path,
+    build_raw_github_url,
+)
 
 # Try to import zoom module - it's optional for passcode fetching
 zoom_available = False
@@ -86,35 +90,19 @@ def get_zoom_meeting_url(meeting_id):
         return f"https://zoom.us/j/{meeting_id}"
 
 
-def build_calendar_link(summary, start_time, duration_minutes, description=""):
-    """Build a Google Calendar add-event link for a specific occurrence."""
-    try:
-        start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
-        end_dt = start_dt + timedelta(minutes=duration_minutes)
-    except Exception:
-        return None
-
-    params = {
-        "action": "TEMPLATE",
-        "text": summary,
-        "dates": f"{start_dt.strftime('%Y%m%dT%H%M%SZ')}/{end_dt.strftime('%Y%m%dT%H%M%SZ')}",
-    }
-    if description:
-        params["details"] = description
-    return f"https://www.google.com/calendar/render?{urlencode(params)}"
-
-
 def generate_comment(call_series, occurrence, mapping):
     """Generate the GitHub comment text."""
     issue_number = occurrence.get('issue_number')
     issue_title = occurrence.get('issue_title', 'Unknown Meeting')
     start_time = occurrence.get('start_time')
     duration = occurrence.get('duration', 60)
+    occurrence_number = occurrence.get('occurrence_number')
 
     # Get series-level meeting ID
     series_data = mapping.get(call_series, {})
     meeting_id = series_data.get('meeting_id')
     issue_url = f"https://github.com/{os.environ.get('GITHUB_REPOSITORY', 'ethereum/pm')}/issues/{issue_number}"
+    default_branch = os.environ.get('GITHUB_DEFAULT_BRANCH', 'master')
 
     comment_lines = [
         "🎉 **Protocol Call Resources:**",
@@ -155,15 +143,29 @@ def generate_comment(call_series, occurrence, mapping):
         if zoom_url:
             details_parts.insert(0, f"Meeting: {zoom_url}")
 
-        calendar_link = build_calendar_link(
-            issue_title,
-            start_time,
-            duration,
-            "\n\n".join(details_parts)
-        )
+        try:
+            calendar_link = build_google_calendar_link(
+                issue_title,
+                start_time,
+                duration,
+                "\n\n".join(details_parts)
+            )
+        except Exception:
+            calendar_link = None
 
         if calendar_link:
-            comment_lines.append(f"✅ **Calendar**: [Add to Calendar]({calendar_link})")
+            calendar_links = [f"[Add to Calendar]({calendar_link})"]
+            if occurrence_number is not None:
+                relative_ics_path = build_occurrence_ics_artifact_path(call_series, start_time, occurrence_number)
+                if os.path.exists(relative_ics_path):
+                    ics_link = build_raw_github_url(
+                        os.environ.get('GITHUB_REPOSITORY', 'ethereum/pm'),
+                        default_branch,
+                        relative_ics_path
+                    )
+                    calendar_links.append(f"[Download .ics]({ics_link})")
+
+            comment_lines.append(f"✅ **Calendar**: {' | '.join(calendar_links)}")
         else:
             comment_lines.append("❌ **Calendar**: Failed to generate link")
     else:
