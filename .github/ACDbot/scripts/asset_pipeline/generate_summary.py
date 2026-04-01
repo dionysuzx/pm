@@ -13,6 +13,7 @@ from pathlib import Path
 
 import anthropic
 import requests
+import yaml
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -85,6 +86,70 @@ def get_example_summary(call_type: str) -> str:
     if fallback.exists():
         return fallback.read_text()
     return ""
+
+
+def _flatten_vocab_entries(entries: list) -> list[str]:
+    """Flatten a YAML list of strings or one-key dicts into readable lines."""
+    flattened = []
+    for entry in entries or []:
+        if isinstance(entry, str):
+            flattened.append(entry)
+        elif isinstance(entry, dict):
+            for key, value in entry.items():
+                flattened.append(f"{key} = {value}")
+    return flattened
+
+
+def build_vocab_reference() -> str:
+    """Format the vocabulary YAML as a high-salience reference block for the model."""
+    if not VOCAB_FILE.exists():
+        return ""
+
+    raw_vocab = VOCAB_FILE.read_text()
+
+    try:
+        vocab_data = yaml.safe_load(raw_vocab) or {}
+    except Exception:
+        return raw_vocab
+
+    sections = []
+
+    clients = vocab_data.get("clients", {})
+    execution_clients = clients.get("execution", [])
+    consensus_clients = clients.get("consensus", [])
+    if execution_clients or consensus_clients:
+        lines = []
+        if execution_clients:
+            lines.append(f"- Execution clients: {', '.join(execution_clients)}")
+        if consensus_clients:
+            lines.append(f"- Consensus clients: {', '.join(consensus_clients)}")
+        sections.append("### Canonical Client Names\n" + "\n".join(lines))
+
+    acronym_lines = _flatten_vocab_entries(vocab_data.get("acronyms", []))
+    technical_terms = vocab_data.get("technical_terms", [])
+    upgrades = vocab_data.get("upgrades", {})
+    protocol_lines = []
+    if acronym_lines:
+        protocol_lines.append(f"- Acronyms: {'; '.join(acronym_lines)}")
+    if technical_terms:
+        protocol_lines.append(f"- Protocol terms: {', '.join(technical_terms)}")
+    upgrade_terms = []
+    for phase in ("past", "current", "future"):
+        upgrade_terms.extend(upgrades.get(phase, []))
+    if upgrade_terms:
+        protocol_lines.append(f"- Upgrade names: {', '.join(upgrade_terms)}")
+    if protocol_lines:
+        sections.append("### Canonical Protocol Terms\n" + "\n".join(protocol_lines))
+
+    error_lines = _flatten_vocab_entries(vocab_data.get("error_patterns", []))
+    if error_lines:
+        sections.append(
+            "### Known Transcript Near-Misses\n"
+            "Normalize these to the canonical forms above when they appear in draft output.\n"
+            + "\n".join(f"- {line}" for line in error_lines)
+        )
+
+    return "\n\n".join(sections) if sections else raw_vocab
 
 
 def fetch_github_issue_agenda(issue_number: int, repo: str = "ethereum/pm") -> str | None:
@@ -228,9 +293,7 @@ def generate_summary(
     example_summary = get_example_summary(call_type)
 
     # Load vocabulary reference for correct spelling of Ethereum terms
-    vocab = ""
-    if VOCAB_FILE.exists():
-        vocab = VOCAB_FILE.read_text()
+    vocab_reference = build_vocab_reference()
 
     # Build prompt
     full_prompt = f"""## Meeting Title
@@ -241,9 +304,12 @@ def generate_summary(
 
 {agenda}
 
-## Ethereum Vocabulary Reference (use correct spellings from this list)
+## Canonical Vocabulary Reference
 
-{vocab if vocab else "(No vocabulary reference available)"}
+Use this reference to normalize client names, protocol terms, and acronyms in the final JSON output.
+Do not preserve obvious transcript misspellings when they map to a canonical term below.
+
+{vocab_reference if vocab_reference else "(No vocabulary reference available)"}
 
 ## Example Output (for reference on structure and length)
 

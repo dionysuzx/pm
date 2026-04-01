@@ -161,3 +161,6 @@ IMPORTANT:
 - Distill each line item to 12 words or less.
 - Action items should be rare (0-3 per meeting) - most meetings have no cross-team coordination needs.
 - Use the Ethereum Vocabulary Reference for correct spelling of all client names, protocol terms, and acronyms. The transcript may contain speech-to-text errors (e.g., "Prism" for Prysm, "Aragon" for Erigon, "Lone Star" for Lodestar). Always use the canonical spellings from the vocabulary list.
+- Make your best attempt to normalize transcript near-misses to the closest canonical Ethereum client, acronym, upgrade, or protocol term in the vocabulary reference.
+- When a transcript spelling is close to a known canonical term, prefer the canonical vocabulary form over the verbatim transcript spelling in the final JSON.
+- Before returning JSON, do a final normalization pass over every drafted highlight, action item, decision, and target. Replace any non-canonical client or protocol spellings with the canonical forms from the vocabulary reference.

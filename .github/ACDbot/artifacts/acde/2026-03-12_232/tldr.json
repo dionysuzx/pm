@@ -3,101 +3,114 @@
   "highlights": {
     "fork_status_and_schedule": [
       {
-        "timestamp": "00:07:01",
-        "highlight": "Glamsterdam devnet progress: bal-devnet-2 running, devnet-3 delayed pending EIP-8037 resolution"
+        "timestamp": "00:37:21",
+        "highlight": "Hegot\u00e1 headliner decision delayed 2 weeks; default remains no headliner"
       },
       {
-        "timestamp": "00:40:15",
-        "highlight": "SSZ experiments for engine API proposed as non-consensus change"
-      },
-      {
-        "timestamp": "01:25:37",
-        "highlight": "Frame transactions headliner decision delayed 2 weeks; default is rejection without additional client support"
+        "timestamp": "01:33:40",
+        "highlight": "Non-headliner proposal window opens next call; deadlines TBD"
       }
     ],
-    "critical_infrastructure": [
-      {
-        "timestamp": "00:10:47",
-        "highlight": "EIP-8037 concerns raised: gas accounting complexity across 7928, 7778, 8037, blob gas needs principled alignment"
-      },
-      {
-        "timestamp": "00:26:02",
-        "highlight": "8037 implementation complexity: refund logic, state gas reservoir, testing gaps identified"
-      }
-    ],
-    "testing_progress": [
+    "devnet_updates": [
       {
         "timestamp": "00:07:30",
-        "highlight": "bal-devnet-2: Aragon syncing issues being fixed; benchmarking shows prefetch slower than expected"
+        "highlight": "bal-devnet-2: Erigon fixing sync issues; benchmarking shows prefetch slower than no-prefetch"
       },
       {
-        "timestamp": "00:09:36",
-        "highlight": "bal-devnet-3 blocked: most clients not ready for EIP-8037; test release 5.4.0 available"
+        "timestamp": "00:09:12",
+        "highlight": "bal-devnet-3: Most clients not ready for EIP-8037; testing release 5.4.0 available"
       },
       {
-        "timestamp": "00:33:05",
-        "highlight": "epbs-devnet-0: running 1 week, Lighthouse/Lone Star/Prism working; Teku/Nimbus joining; exits/builders not working"
+        "timestamp": "00:34:00",
+        "highlight": "epbs-devnet-0: Stable for 1 week; Lighthouse, Lodestar, Prysm working; second EL client needed"
       }
     ],
-    "repricing_updates": [
+    "eip_8037_concerns": [
       {
-        "timestamp": "00:22:02",
-        "highlight": "Repricing breakout scheduled next Wednesday to address 8037 complexity and align with 7928"
+        "timestamp": "00:11:30",
+        "highlight": "EIP-8037 complexity raised: 4 gas flavors misaligned; needs coherent multidimensional gas approach"
+      },
+      {
+        "timestamp": "00:19:15",
+        "highlight": "Proposal to align EIP-7928 and EIP-8037 state gas accounting for coherence"
+      },
+      {
+        "timestamp": "00:22:45",
+        "highlight": "Repricing breakout next Wednesday to address EIP-8037 simplification options"
+      },
+      {
+        "timestamp": "00:26:20",
+        "highlight": "bal-devnet-3 to proceed with EIP-8037 as-is for practical testing"
       }
     ],
-    "headliner_selection": [
+    "frame_transactions_debate": [
       {
-        "timestamp": "00:39:28",
-        "highlight": "SSZ/Pure ETH rejected as Hegot\u00e1 headliner; focus on out-of-protocol implementation"
+        "timestamp": "00:46:54",
+        "highlight": "Besu shifted from Lucid preference to no headliner; Nethermind team split"
       },
       {
-        "timestamp": "00:40:56",
-        "highlight": "Lucid rejected as Hegot\u00e1 headliner; can be reconsidered for I-Star"
+        "timestamp": "00:52:40",
+        "highlight": "Txpool complexity main concern; champions propose tunable implementation scope"
       },
       {
-        "timestamp": "00:48:54",
-        "highlight": "Frame transactions support: 2 clients favor (Geth, Aragon); 3 prefer no headliner (Nethermind split, Besu, Reth)"
+        "timestamp": "00:57:15",
+        "highlight": "Frame transactions enable native AA + FOCIL synergy for censorship resistance"
       },
       {
-        "timestamp": "01:00:30",
-        "highlight": "Post-quantum urgency highlighted: DAO migration timeline 2028-2029 requires native AA soon"
+        "timestamp": "01:19:15",
+        "highlight": "Post-quantum urgency: DAO migrations need 2028-2029 timeline, frame tx enables path"
+      },
+      {
+        "timestamp": "01:20:30",
+        "highlight": "Transaction assertions (security feature) depends on frame transactions as foundation"
+      }
+    ],
+    "organizational": [
+      {
+        "timestamp": "00:40:15",
+        "highlight": "SSZ for Engine API as non-consensus change supported by multiple clients"
       }
     ]
   },
   "action_items": [
     {
-      "timestamp": "00:22:28",
-      "action": "Repricing breakout next Wednesday: address 8037/7928 alignment and mempool rule clarity",
-      "owner": "Maria Silva, Andrew Ashikhmin, all interested teams"
+      "timestamp": "01:33:30",
+      "action": "Develop prototype txpool rules and integrate into EIP-8141 specification",
+      "owner": "Frame transaction champions (Geth, ethrex)"
     },
     {
-      "timestamp": "01:26:30",
-      "action": "Frame transactions champions: develop prototype mempool rules, clarify 8141 txpool spec for 2-week review",
-      "owner": "Felix, Geth team, ethrex"
+      "timestamp": "00:22:45",
+      "action": "Attend repricing breakout next Wednesday to discuss EIP-8037 simplification",
+      "owner": "All client teams"
+    },
+    {
+      "timestamp": "01:32:16",
+      "action": "Champions shore up client support over next 2 weeks via clarification and prototyping",
+      "owner": "Frame transaction champions"
     }
   ],
   "decisions": [
     {
-      "timestamp": "00:39:56",
-      "decision": "SSE/Pure ETH rejected as Hegot\u00e1 headliner"
+      "timestamp": "00:40:15",
+      "decision": "SSZ for Engine API rejected as Hegot\u00e1 headliner (supported as non-consensus change)"
     },
     {
       "timestamp": "00:40:56",
-      "decision": "Lucid rejected as Hegot\u00e1 headliner"
+      "decision": "Lucid rejected as Hegot\u00e1 headliner candidate"
     },
     {
-      "timestamp": "01:33:46",
-      "decision": "Frame transactions headliner decision delayed to March 26; requires Besu, Nethermind, or Reth support to proceed"
+      "timestamp": "01:33:20",
+      "decision": "Frame transactions headliner decision delayed 2 weeks; default outcome is rejection"
     }
   ],
   "targets": [
     {
-      "timestamp": "00:22:28",
-      "target": "March 19 - Repricing breakout to resolve EIP-8037/7928 alignment"
+      "timestamp": "00:22:45",
+      "target": "Next Wednesday - Repricing breakout focused on EIP-8037 concerns"
     },
     {
-      "timestamp": "01:25:37",
-      "target": "March 26 - Final frame transactions headliner decision"
+      "timestamp": "01:33:40",
+      "target": "Next ACDE call - Final frame transactions headliner decision + non-headliner window opens"
     }
   ]
 }
