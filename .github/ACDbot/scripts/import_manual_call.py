@@ -2,24 +2,24 @@
 """
 Manual breakout call workflow.
 
-This script intentionally models the real operator workflow as two commands:
+Split between a fast local step and a CI step:
 
-1. prepare
-   - normalize the local Zoom `chat.txt`
-   - transcribe the local recording
-   - run transcript cleanup + summary generation
-   - write PM artifact metadata
+1. init  (local, no API keys)
+   - canonicalize the local Zoom `chat.txt`
+   - write `config.json` with parent metadata and the operator-provided YouTube URL
+   - regenerate `artifacts/manifest.json`
 
-2. publish
-   - attach the final YouTube URL
-   - regenerate the PM manifest
+2. transcribe-pending  (CI, needs OPENAI + ANTHROPIC)
+   - find any breakout artifacts dir whose config has a `parent` and no `transcript.vtt`
+   - pull audio from the YouTube URL via yt-dlp
+   - run transcribe → changelog → apply changelog → summary
+   - regenerate `artifacts/manifest.json`
 
-The design is deliberately strict:
-- no issue/date/number/title args from the operator
+Design constraints:
+- operator never waits on OpenAI/Anthropic transcription
+- operator never commits raw .m4a / .mp4 recordings
 - parent metadata is derived from PM's existing mapping
 - breakout numbering is assigned automatically
-- the only call-specific inputs are the source folder, breakout series, parent call,
-  and later the YouTube URL
 """
 
 from __future__ import annotations
@@ -29,7 +29,6 @@ import json
 import mimetypes
 import os
 import re
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -235,22 +234,28 @@ def canonicalize_chat(source_dir: Path) -> str:
     return "\n".join(normalized).strip() + "\n"
 
 
-def choose_media_source(source_dir: Path) -> Path:
-    preferred_patterns = [
-        "audio*.m4a",
-        "audio*.mp3",
-        "audio*.wav",
-        "video*.mp4",
-        "*.m4a",
-        "*.mp3",
-        "*.wav",
-        "*.mp4",
-    ]
-    for pattern in preferred_patterns:
-        matches = sorted(path for path in source_dir.glob(pattern) if path.is_file())
-        if matches:
-            return matches[0]
-    raise SystemExit(f"Could not find an audio/video recording in {source_dir}")
+def download_youtube_audio(video_url: str, dest_dir: Path) -> Path:
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    output_template = str(dest_dir / "audio.%(ext)s")
+    run_command(
+        [
+            "yt-dlp",
+            "--quiet",
+            "--no-warnings",
+            "-f",
+            "bestaudio[ext=m4a]/bestaudio",
+            "-x",
+            "--audio-format",
+            "m4a",
+            "-o",
+            output_template,
+            video_url,
+        ]
+    )
+    candidates = sorted(dest_dir.glob("audio.*"))
+    if not candidates:
+        raise SystemExit(f"yt-dlp produced no audio file for {video_url}")
+    return candidates[0]
 
 
 def ffprobe_value(path: Path, entry: str) -> str:
@@ -381,7 +386,7 @@ def write_file(path: Path, content: str) -> None:
     path.write_text(content, encoding="utf-8")
 
 
-def run_pipeline(meeting_dir: Path, series: str, number: int) -> None:
+def run_pipeline(meeting_dir: Path, series: str, number: int, *, non_interactive: bool = False) -> None:
     if not os.environ.get("ANTHROPIC_API_KEY"):
         raise SystemExit("ANTHROPIC_API_KEY is required for changelog + summary generation")
 
@@ -397,9 +402,10 @@ def run_pipeline(meeting_dir: Path, series: str, number: int) -> None:
     if result.returncode != 0:
         raise SystemExit("generate_changelog.py failed")
 
-    changelog_path = meeting_dir / "transcript_changelog.tsv"
-    print(f"\nReview the generated changelog, then press Enter to continue:\n  {changelog_path}")
-    input()
+    if not non_interactive:
+        changelog_path = meeting_dir / "transcript_changelog.tsv"
+        print(f"\nReview the generated changelog, then press Enter to continue:\n  {changelog_path}")
+        input()
 
     for script_cmd in commands[1:]:
         full_cmd = [sys.executable, *script_cmd]
@@ -431,39 +437,6 @@ def base_config(parent: ParentCall, series: str) -> dict:
     }
 
 
-def prepare_breakout(source_dir: Path, series: str, parent: ParentCall) -> Path:
-    number = breakout_number(series, parent)
-    meeting_dir = artifact_dir(series, parent.date, number)
-    config_path = meeting_dir / "config.json"
-
-    meeting_dir.mkdir(parents=True, exist_ok=True)
-
-    print(f"Preparing {series} breakout #{number:03d}")
-    print(f"Parent call: {parent.series}/{parent.number:03d} (issue #{parent.issue})")
-    print(f"Artifact dir: {meeting_dir}")
-    print(f"Expected YouTube title: {breakout_meeting_title(parent, series)}")
-
-    chat_content = canonicalize_chat(source_dir)
-    write_file(meeting_dir / "chat.txt", chat_content)
-
-    media_source = choose_media_source(source_dir)
-    print(f"Using media source: {media_source.name}")
-    transcript_vtt = transcribe_media(media_source)
-    write_file(meeting_dir / "transcript.vtt", transcript_vtt)
-
-    config = load_config(config_path)
-    merged_config = {
-        **config,
-        **base_config(parent, series),
-        "sync": config.get("sync") or base_config(parent, series)["sync"],
-    }
-    write_file(config_path, json.dumps(merged_config, indent=2) + "\n")
-
-    run_pipeline(meeting_dir, series, number)
-    regenerate_manifest()
-    return meeting_dir
-
-
 def extract_youtube_video_id(url: str) -> str:
     match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
     if not match:
@@ -471,50 +444,128 @@ def extract_youtube_video_id(url: str) -> str:
     return match.group(1)
 
 
-def publish_breakout(series: str, parent: ParentCall, youtube_url: str) -> Path:
+def init_breakout(source_dir: Path, series: str, parent: ParentCall, youtube_url: str) -> Path:
     number = breakout_number(series, parent)
     meeting_dir = artifact_dir(series, parent.date, number)
     config_path = meeting_dir / "config.json"
-    if not config_path.exists():
-        raise SystemExit(
-            f"Prepared breakout artifacts not found for {series} + {parent.series}/{parent.number:03d}. "
-            f"Run 'prepare' first."
-        )
+
+    meeting_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Initializing {series} breakout #{number:03d}")
+    print(f"Parent call: {parent.series}/{parent.number:03d} (issue #{parent.issue})")
+    print(f"Artifact dir: {meeting_dir}")
+
+    chat_content = canonicalize_chat(source_dir)
+    write_file(meeting_dir / "chat.txt", chat_content)
+
+    normalized_url = f"https://www.youtube.com/watch?v={extract_youtube_video_id(youtube_url)}"
 
     config = load_config(config_path)
-    config["videoUrl"] = f"https://www.youtube.com/watch?v={extract_youtube_video_id(youtube_url)}"
-    write_file(config_path, json.dumps(config, indent=2) + "\n")
-    regenerate_manifest()
+    merged_config = {
+        **config,
+        **base_config(parent, series),
+        "videoUrl": normalized_url,
+        "sync": config.get("sync") or base_config(parent, series)["sync"],
+    }
+    write_file(config_path, json.dumps(merged_config, indent=2) + "\n")
 
-    print(f"Published {series} breakout #{number:03d}")
-    print(f"Artifact dir: {meeting_dir}")
-    print(f"Video URL: {config['videoUrl']}")
+    regenerate_manifest()
     return meeting_dir
 
 
+def parse_call_dir(call_dir: Path) -> tuple[str, int] | None:
+    match = re.search(r"_(\d+)$", call_dir.name)
+    if not match:
+        return None
+    return call_dir.parent.name, int(match.group(1))
+
+
+def find_pending_breakouts() -> list[tuple[Path, str, int]]:
+    """Return [(meeting_dir, series, number)] for breakouts missing a transcript."""
+    pending: list[tuple[Path, str, int]] = []
+    if not ARTIFACTS_DIR.exists():
+        return pending
+    for series_dir in sorted(ARTIFACTS_DIR.iterdir()):
+        if not series_dir.is_dir():
+            continue
+        for call_dir in sorted(series_dir.iterdir()):
+            if not call_dir.is_dir():
+                continue
+            config = load_config(call_dir / "config.json")
+            parent_config = config.get("parent")
+            if not isinstance(parent_config, dict):
+                continue
+            if not config.get("videoUrl"):
+                continue
+            if (call_dir / "transcript.vtt").exists():
+                continue
+            parsed = parse_call_dir(call_dir)
+            if not parsed:
+                continue
+            pending.append((call_dir, parsed[0], parsed[1]))
+    return pending
+
+
+def transcribe_breakout(meeting_dir: Path, series: str, number: int) -> None:
+    config = load_config(meeting_dir / "config.json")
+    video_url = config.get("videoUrl")
+    if not video_url:
+        raise SystemExit(f"{meeting_dir}: config.json missing videoUrl")
+
+    print(f"\n=== Transcribing {series}/#{number:03d} ===")
+    print(f"  dir:   {meeting_dir}")
+    print(f"  video: {video_url}")
+
+    with tempfile.TemporaryDirectory(prefix="breakout-yt-") as temp_dir_raw:
+        audio_path = download_youtube_audio(video_url, Path(temp_dir_raw))
+        print(f"  audio: {audio_path.name} ({audio_path.stat().st_size} bytes)")
+        transcript_vtt = transcribe_media(audio_path)
+
+    write_file(meeting_dir / "transcript.vtt", transcript_vtt)
+    run_pipeline(meeting_dir, series, number, non_interactive=True)
+
+
+def transcribe_pending() -> int:
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise SystemExit("OPENAI_API_KEY is required")
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        raise SystemExit("ANTHROPIC_API_KEY is required")
+
+    pending = find_pending_breakouts()
+    if not pending:
+        print("No pending breakouts to transcribe.")
+        return 0
+
+    print(f"Found {len(pending)} breakout(s) needing transcription.")
+    for meeting_dir, series, number in pending:
+        transcribe_breakout(meeting_dir, series, number)
+
+    regenerate_manifest()
+    return len(pending)
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Prepare or publish a manually recorded breakout call.")
+    parser = argparse.ArgumentParser(description="Breakout call ingest helpers.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    prepare = subparsers.add_parser("prepare", help="Normalize chat, transcribe media, and run the PM pipeline")
-    prepare.add_argument("--source-dir", required=True, help="Folder containing the local Zoom breakout export")
-    prepare.add_argument(
+    init = subparsers.add_parser(
+        "init",
+        help="Write config.json + chat.txt for a breakout. Local, no API keys.",
+    )
+    init.add_argument("--source-dir", required=True, help="Folder containing chat.txt from the Zoom breakout export")
+    init.add_argument(
         "--series",
         required=True,
         choices=sorted(BREAKOUT_DISPLAY_NAMES.keys()),
-        help="Breakout series to publish (e.g. epbs or bal)",
+        help="Breakout series (e.g. epbs or bal)",
     )
-    prepare.add_argument("--parent", required=True, help="Parent call in <series>/<number> form, e.g. acdt/077")
+    init.add_argument("--parent", required=True, help="Parent call in <series>/<number> form, e.g. acdt/077")
+    init.add_argument("--youtube-url", required=True, help="YouTube URL for the uploaded breakout recording")
 
-    publish = subparsers.add_parser("publish", help="Attach the final YouTube URL and regenerate the PM manifest")
-    publish.add_argument(
-        "--series",
-        required=True,
-        choices=sorted(BREAKOUT_DISPLAY_NAMES.keys()),
-        help="Breakout series to publish (e.g. epbs or bal)",
+    subparsers.add_parser(
+        "transcribe-pending",
+        help="Transcribe any breakouts with a videoUrl but no transcript.vtt. CI step.",
     )
-    publish.add_argument("--parent", required=True, help="Parent call in <series>/<number> form, e.g. acdt/077")
-    publish.add_argument("--youtube-url", required=True, help="Final YouTube URL for the uploaded breakout recording")
 
     return parser
 
@@ -523,23 +574,20 @@ def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
-    parent_series, parent_number = parse_parent(args.parent)
-    parent = resolve_parent_call(parent_series, parent_number)
-
-    if args.command == "prepare":
+    if args.command == "init":
+        parent_series, parent_number = parse_parent(args.parent)
+        parent = resolve_parent_call(parent_series, parent_number)
         source_dir = Path(os.path.expanduser(args.source_dir)).resolve()
         if not source_dir.exists():
             raise SystemExit(f"Source dir not found: {source_dir}")
-        meeting_dir = prepare_breakout(source_dir, args.series, parent)
-        print("\nPrepare complete.")
-        print(f"Next step: upload to YouTube, then run:\n  uv run scripts/import_manual_call.py publish --series {args.series} --parent {args.parent} --youtube-url <url>")
-        print(f"Prepared artifacts: {meeting_dir}")
+        meeting_dir = init_breakout(source_dir, args.series, parent, args.youtube_url)
+        print("\nInit complete.")
+        print(f"Artifacts: {meeting_dir}")
+        print("Next step: commit the PM artifact changes and push them.")
+        print("CI will transcribe the video and append the derived artifacts automatically.")
         return
 
-    meeting_dir = publish_breakout(args.series, parent, args.youtube_url)
-    print("\nPublish complete.")
-    print("Next step: commit the PM artifact changes and push them to your PM fork.")
-    print(f"Published artifacts: {meeting_dir}")
+    transcribe_pending()
 
 
 if __name__ == "__main__":
