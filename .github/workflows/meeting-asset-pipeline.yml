@@ -210,7 +210,7 @@ jobs:
           github-token: ${{ secrets.FORKCAST_DISPATCH_TOKEN }}
           script: |
             await github.rest.repos.createDispatchEvent({
-              owner: 'ethereum',
+              owner: context.repo.owner,
               repo: 'forkcast',
               event_type: 'pm-assets-updated'
             });

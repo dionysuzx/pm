@@ -1,0 +1,23 @@
+name: Dispatch Forkcast on Asset Push
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/ACDbot/artifacts/**'
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Forkcast
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.FORKCAST_DISPATCH_TOKEN }}
+          script: |
+            await github.rest.repos.createDispatchEvent({
+              owner: context.repo.owner,
+              repo: 'forkcast',
+              event_type: 'pm-assets-updated'
+            });
