@@ -193,27 +193,22 @@ def generate_summary(
     # Extract date from directory name (e.g., "2026-02-05_174" -> "2026-02-05")
     date_str = meeting_dir.name.split("_")[0]
 
-    # Look up occurrence data from mapping file
-    occurrence = get_occurrence_from_mapping(call_type, date_str)
+    # Look up occurrence data from mapping file (falls back to per-call config.json
+    # for breakouts and other manually-ingested calls that aren't in the Zoom mapping).
+    occurrence = get_occurrence_from_mapping(call_type, date_str) or {}
     config = load_call_config(meeting_dir)
+    parent_config = config.get("parent") if isinstance(config.get("parent"), dict) else {}
 
-    issue_number = None
-    agenda_issue = None
-    meeting_title = None
-
-    if occurrence:
-        issue_number = occurrence.get('issue_number')
-        agenda_issue = occurrence.get('issue_number')
-        meeting_title = occurrence.get('issue_title')
-
-    if not issue_number:
-        issue_number = config.get("issue")
-
-    if not agenda_issue:
-        agenda_issue = config.get("agendaIssue") or issue_number
-
-    if not meeting_title:
-        meeting_title = config.get("meetingTitle") or config.get("name")
+    agenda_issue = (
+        occurrence.get('issue_number')
+        or config.get("issue")
+        or parent_config.get("issue")
+    )
+    meeting_title = (
+        occurrence.get('issue_title')
+        or config.get("meetingTitle")
+        or config.get("name")
+    )
 
     if meeting_title:
         print(f"Meeting title: {meeting_title}")

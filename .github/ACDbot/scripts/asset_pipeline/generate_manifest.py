@@ -174,9 +174,6 @@ def generate_manifest() -> dict:
             if config.get("issue"):
                 call_entry["issue"] = config["issue"]
 
-            if config.get("agendaIssue"):
-                call_entry["agendaIssue"] = config["agendaIssue"]
-
             if config.get("videoUrl"):
                 call_entry["videoUrl"] = config["videoUrl"]
 

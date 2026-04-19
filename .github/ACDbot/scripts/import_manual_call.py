@@ -10,7 +10,7 @@ Split between a fast local step and a CI step:
    - regenerate `artifacts/manifest.json`
 
 2. transcribe-pending  (CI, needs OPENAI + ANTHROPIC)
-   - find any breakout artifacts dir whose config has a `parent` and no `transcript.vtt`
+   - find any breakout artifacts dir whose config has a `parent` + `videoUrl` and no `transcript.vtt`
    - pull audio from the YouTube URL via yt-dlp
    - run transcribe → changelog → apply changelog → summary
    - regenerate `artifacts/manifest.json`
@@ -424,7 +424,6 @@ def base_config(parent: ParentCall, series: str) -> dict:
     return {
         "name": breakout_display_name(series),
         "meetingTitle": breakout_meeting_title(parent, series),
-        "agendaIssue": parent.issue,
         "parent": {
             "series": parent.series,
             "number": parent.number,

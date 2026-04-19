@@ -69,7 +69,7 @@ What `init` does:
 - resolves the parent call from PM metadata
 - assigns the next breakout number automatically
 - normalizes the local `chat.txt` into PM's canonical chat format
-- writes `config.json` (including `videoUrl`, `parent`, `agendaIssue`)
+- writes `config.json` (including `videoUrl`, `parent`)
 - regenerates `artifacts/manifest.json`
 
 No transcription, no API calls. Runs in seconds.
