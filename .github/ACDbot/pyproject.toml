@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ACDbot"
 version = "1.0.0"
 description = "A bot for handling issues."
+requires-python = ">=3.11"
 authors = [
     { name = "Nicolas Consigny", email = "nicolas.consigny@ethereum.org" }
 ]

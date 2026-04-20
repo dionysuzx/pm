@@ -26,7 +26,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import mimetypes
 import os
 import re
 import subprocess
@@ -35,7 +34,14 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import requests
+from manual_call_chat import canonicalize_chat
+from manual_call_media import download_youtube_audio, normalize_youtube_url, transcribe_media
+from manual_call_series import (
+    BREAKOUT_DISPLAY_NAMES,
+    breakout_display_name,
+    infer_breakout_series,
+    strip_date_suffix,
+)
 
 SCRIPT_DIR = Path(__file__).parent
 ACDBOT_DIR = SCRIPT_DIR.parent
@@ -43,18 +49,7 @@ PIPELINE_DIR = SCRIPT_DIR / "asset_pipeline"
 ARTIFACTS_DIR = ACDBOT_DIR / "artifacts"
 MAPPING_FILE = ACDBOT_DIR / "meeting_topic_mapping.json"
 
-OPENAI_TRANSCRIPTIONS_URL = "https://api.openai.com/v1/audio/transcriptions"
-OPENAI_TRANSCRIPTION_MODEL = "whisper-1"
-MAX_TRANSCRIPTION_BYTES = 24 * 1024 * 1024
-DATE_SUFFIX_RE = re.compile(r",\s*[A-Z][a-z]+\s+\d{1,2},\s+\d{4}$")
 PARENT_RE = re.compile(r"^(?P<series>[a-z0-9-]+)/(?P<number>\d+)$")
-
-BREAKOUT_DISPLAY_NAMES = {
-    "epbs": "ePBS breakout",
-    "bal": "BAL breakout",
-    "focil": "FOCIL breakout",
-    "pqi": "PQ Interop breakout",
-}
 
 
 @dataclass(frozen=True)
@@ -130,14 +125,6 @@ def resolve_parent_call(parent_series: str, parent_number: int) -> ParentCall:
     raise SystemExit(f"Could not resolve parent call {parent_series}/{parent_number:03d} from mapping")
 
 
-def breakout_display_name(series: str) -> str:
-    return BREAKOUT_DISPLAY_NAMES.get(series, f"{series.upper()} breakout")
-
-
-def strip_date_suffix(title: str) -> str:
-    return DATE_SUFFIX_RE.sub("", title).strip()
-
-
 def breakout_meeting_title(parent: ParentCall, series: str) -> str:
     return f"{strip_date_suffix(parent.issue_title)} -- {breakout_display_name(series)}"
 
@@ -201,186 +188,6 @@ def breakout_number(series: str, parent: ParentCall) -> int:
     return next_breakout_number(series)
 
 
-def canonicalize_chat(source_dir: Path) -> str:
-    chat_path = source_dir / "chat.txt"
-    if not chat_path.exists():
-        raise SystemExit(f"Expected chat.txt in source dir: {chat_path}")
-
-    text = chat_path.read_text(encoding="utf-8", errors="replace")
-    lines = text.splitlines()
-    normalized: list[str] = []
-    current_index: int | None = None
-
-    for raw_line in lines:
-        line = raw_line.rstrip()
-        if not line.strip():
-            continue
-
-        canonical_match = re.match(r"^(\d{2}:\d{2}:\d{2})\t(.+?):\t([\s\S]*)$", line)
-        export_match = re.match(r"^(\d{2}:\d{2}:\d{2})\t\s*From\s+(.+?)\s*:\s*([\s\S]*)$", line)
-        match = canonical_match or export_match
-        if match:
-            timestamp, speaker, message = match.groups()
-            normalized.append(f"{timestamp}\t{speaker.strip()}:\t{message.strip()}")
-            current_index = len(normalized) - 1
-            continue
-
-        if current_index is not None:
-            normalized[current_index] = f"{normalized[current_index]}\n{line.strip()}"
-
-    if not normalized:
-        raise SystemExit(f"Could not parse any chat messages from {chat_path}")
-
-    return "\n".join(normalized).strip() + "\n"
-
-
-def download_youtube_audio(video_url: str, dest_dir: Path) -> Path:
-    dest_dir.mkdir(parents=True, exist_ok=True)
-    output_template = str(dest_dir / "audio.%(ext)s")
-    run_command(
-        [
-            "yt-dlp",
-            "--quiet",
-            "--no-warnings",
-            "-f",
-            "bestaudio[ext=m4a]/bestaudio",
-            "-x",
-            "--audio-format",
-            "m4a",
-            "-o",
-            output_template,
-            video_url,
-        ]
-    )
-    candidates = sorted(dest_dir.glob("audio.*"))
-    if not candidates:
-        raise SystemExit(f"yt-dlp produced no audio file for {video_url}")
-    return candidates[0]
-
-
-def ffprobe_value(path: Path, entry: str) -> str:
-    result = run_command(
-        [
-            "ffprobe",
-            "-v",
-            "error",
-            "-show_entries",
-            entry,
-            "-of",
-            "default=noprint_wrappers=1:nokey=1",
-            str(path),
-        ],
-        capture_output=True,
-    )
-    return result.stdout.strip()
-
-
-def media_duration_seconds(path: Path) -> float:
-    return float(ffprobe_value(path, "format=duration"))
-
-
-def format_vtt_timestamp(seconds: float) -> str:
-    millis = round(seconds * 1000)
-    hours, remainder = divmod(millis, 3_600_000)
-    minutes, remainder = divmod(remainder, 60_000)
-    secs, ms = divmod(remainder, 1000)
-    return f"{hours:02d}:{minutes:02d}:{secs:02d}.{ms:03d}"
-
-
-def split_for_transcription(media_path: Path, temp_dir: Path) -> list[Path]:
-    size_bytes = media_path.stat().st_size
-    if size_bytes <= MAX_TRANSCRIPTION_BYTES:
-        return [media_path]
-
-    duration = media_duration_seconds(media_path)
-    estimated_seconds = max(300, int(duration * (MAX_TRANSCRIPTION_BYTES / size_bytes) * 0.85))
-    output_pattern = temp_dir / "chunk_%03d.m4a"
-    run_command(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-i",
-            str(media_path),
-            "-f",
-            "segment",
-            "-segment_time",
-            str(estimated_seconds),
-            "-c",
-            "copy",
-            str(output_pattern),
-        ]
-    )
-    chunks = sorted(temp_dir.glob("chunk_*.m4a"))
-    if not chunks:
-        raise SystemExit("ffmpeg did not produce any transcription chunks")
-    return chunks
-
-
-def transcribe_chunk(path: Path) -> dict:
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        raise SystemExit("OPENAI_API_KEY is required for breakout transcript generation")
-
-    mime_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-    with open(path, "rb") as media_file:
-        response = requests.post(
-            OPENAI_TRANSCRIPTIONS_URL,
-            headers={"Authorization": f"Bearer {api_key}"},
-            data={
-                "model": OPENAI_TRANSCRIPTION_MODEL,
-                "response_format": "verbose_json",
-            },
-            files={"file": (path.name, media_file, mime_type)},
-            timeout=1800,
-        )
-
-    if response.status_code != 200:
-        raise SystemExit(
-            f"OpenAI transcription failed for {path.name}: "
-            f"{response.status_code} {response.text}"
-        )
-
-    return response.json()
-
-
-def build_vtt_from_segments(segments: list[dict]) -> str:
-    lines = ["WEBVTT", ""]
-    for segment in segments:
-        text = (segment.get("text") or "").strip()
-        if not text:
-            continue
-        start = format_vtt_timestamp(float(segment["start"]))
-        end = format_vtt_timestamp(float(segment["end"]))
-        lines.append(f"{start} --> {end}")
-        lines.append(text)
-        lines.append("")
-    return "\n".join(lines).strip() + "\n"
-
-
-def transcribe_media(media_path: Path) -> str:
-    all_segments: list[dict] = []
-    with tempfile.TemporaryDirectory(prefix="breakout-transcribe-") as temp_dir_raw:
-        temp_dir = Path(temp_dir_raw)
-        chunks = split_for_transcription(media_path, temp_dir)
-        offset = 0.0
-
-        for index, chunk in enumerate(chunks, start=1):
-            print(f"Transcribing chunk {index}/{len(chunks)}: {chunk.name}")
-            result = transcribe_chunk(chunk)
-            segments = result.get("segments", [])
-            for segment in segments:
-                adjusted = dict(segment)
-                adjusted["start"] = float(segment["start"]) + offset
-                adjusted["end"] = float(segment["end"]) + offset
-                all_segments.append(adjusted)
-            offset += media_duration_seconds(chunk)
-
-    if not all_segments:
-        raise SystemExit("Transcription completed but returned no segments")
-    return build_vtt_from_segments(all_segments)
-
-
 def write_file(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
@@ -436,11 +243,31 @@ def base_config(parent: ParentCall, series: str) -> dict:
     }
 
 
-def extract_youtube_video_id(url: str) -> str:
-    match = re.search(r"(?:v=|youtu\.be/)([A-Za-z0-9_-]{6,})", url)
-    if not match:
-        raise SystemExit(f"Could not extract YouTube video ID from URL: {url}")
-    return match.group(1)
+def resolve_source_dir() -> Path:
+    source_dir = Path.cwd().resolve()
+    if not source_dir.exists():
+        raise SystemExit(f"Current working directory not found: {source_dir}")
+    if not (source_dir / "chat.txt").exists():
+        raise SystemExit(
+            f"Expected chat.txt in the current working directory: {source_dir}\n"
+            "Run `init` from the breakout export folder."
+        )
+    return source_dir
+
+
+def resolve_breakout_series(source_dir: Path, requested_series: str | None) -> str:
+    if requested_series:
+        return requested_series
+
+    inferred_series = infer_breakout_series(source_dir)
+    if inferred_series:
+        return inferred_series
+
+    supported = ", ".join(sorted(BREAKOUT_DISPLAY_NAMES))
+    raise SystemExit(
+        "Could not infer breakout series from the current directory name.\n"
+        f"Pass --series explicitly ({supported})."
+    )
 
 
 def init_breakout(source_dir: Path, series: str, parent: ParentCall, youtube_url: str) -> Path:
@@ -457,7 +284,7 @@ def init_breakout(source_dir: Path, series: str, parent: ParentCall, youtube_url
     chat_content = canonicalize_chat(source_dir)
     write_file(meeting_dir / "chat.txt", chat_content)
 
-    normalized_url = f"https://www.youtube.com/watch?v={extract_youtube_video_id(youtube_url)}"
+    normalized_url = normalize_youtube_url(youtube_url)
 
     config = load_config(config_path)
     merged_config = {
@@ -549,14 +376,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     init = subparsers.add_parser(
         "init",
-        help="Write config.json + chat.txt for a breakout. Local, no API keys.",
+        help="Write config.json + chat.txt for a breakout in the current directory. Local, no API keys.",
     )
-    init.add_argument("--source-dir", required=True, help="Folder containing chat.txt from the Zoom breakout export")
     init.add_argument(
         "--series",
-        required=True,
         choices=sorted(BREAKOUT_DISPLAY_NAMES.keys()),
-        help="Breakout series (e.g. epbs or bal)",
+        help="Breakout series when it cannot be inferred from the current directory name",
     )
     init.add_argument("--parent", required=True, help="Parent call in <series>/<number> form, e.g. acdt/077")
     init.add_argument("--youtube-url", required=True, help="YouTube URL for the uploaded breakout recording")
@@ -576,10 +401,9 @@ def main() -> None:
     if args.command == "init":
         parent_series, parent_number = parse_parent(args.parent)
         parent = resolve_parent_call(parent_series, parent_number)
-        source_dir = Path(os.path.expanduser(args.source_dir)).resolve()
-        if not source_dir.exists():
-            raise SystemExit(f"Source dir not found: {source_dir}")
-        meeting_dir = init_breakout(source_dir, args.series, parent, args.youtube_url)
+        source_dir = resolve_source_dir()
+        series = resolve_breakout_series(source_dir, args.series)
+        meeting_dir = init_breakout(source_dir, series, parent, args.youtube_url)
         print("\nInit complete.")
         print(f"Artifacts: {meeting_dir}")
         print("Next step: commit the PM artifact changes and push them.")
