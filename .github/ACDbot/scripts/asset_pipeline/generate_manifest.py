@@ -53,6 +53,19 @@ def load_mapping_file() -> dict:
         return {}
 
 
+def load_call_config(call_dir: Path) -> dict:
+    """Load optional per-call config metadata."""
+    config_path = call_dir / "config.json"
+    if not config_path.exists():
+        return {}
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 def get_youtube_video_url(occurrence: dict) -> str | None:
     """Extract YouTube video URL from occurrence data."""
     # Check for uploaded video ID first (preferred)
@@ -145,6 +158,7 @@ def generate_manifest() -> dict:
             if not resources:
                 continue  # Skip empty directories
 
+            config = load_call_config(call_dir)
             call_entry = {
                 "date": date,
                 "path": f"{series_id}/{call_dir.name}",
@@ -154,13 +168,30 @@ def generate_manifest() -> dict:
             if number is not None:
                 call_entry["number"] = number
 
+            if config.get("name"):
+                call_entry["name"] = config["name"]
+
+            if config.get("issue"):
+                call_entry["issue"] = config["issue"]
+
+            if config.get("videoUrl"):
+                call_entry["videoUrl"] = config["videoUrl"]
+
+            parent = config.get("parent")
+            if isinstance(parent, dict) and parent.get("series") and parent.get("number") is not None:
+                call_entry["parent"] = {
+                    "series": parent["series"],
+                    "number": parent["number"],
+                    **({"issue": parent["issue"]} if parent.get("issue") else {}),
+                }
+
             # Look up issue number and video URL from mapping file
             occurrence = find_occurrence_in_mapping(mapping, series_id, date)
             if occurrence:
-                if occurrence.get("issue_number"):
+                if occurrence.get("issue_number") and not call_entry.get("issue"):
                     call_entry["issue"] = occurrence["issue_number"]
                 video_url = get_youtube_video_url(occurrence)
-                if video_url:
+                if video_url and not call_entry.get("videoUrl"):
                     call_entry["videoUrl"] = video_url
 
             calls.append(call_entry)

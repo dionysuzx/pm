@@ -57,6 +57,19 @@ def get_occurrence_from_mapping(call_type: str, date_str: str) -> dict | None:
         return None
 
 
+def load_call_config(meeting_dir: Path) -> dict:
+    """Load optional per-call config metadata."""
+    config_path = meeting_dir / "config.json"
+    if not config_path.exists():
+        return {}
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
 def get_meeting_title_from_mapping(issue_number: int) -> str | None:
     """Look up the issue_title from the mapping file by issue number."""
     if not MAPPING_FILE.exists():
@@ -180,28 +193,35 @@ def generate_summary(
     # Extract date from directory name (e.g., "2026-02-05_174" -> "2026-02-05")
     date_str = meeting_dir.name.split("_")[0]
 
-    # Look up occurrence data from mapping file
-    occurrence = get_occurrence_from_mapping(call_type, date_str)
-    if not occurrence:
-        print(f"No occurrence found in mapping for {call_type} on {date_str}")
-        return False
+    # Look up occurrence data from mapping file (falls back to per-call config.json
+    # for breakouts and other manually-ingested calls that aren't in the Zoom mapping).
+    occurrence = get_occurrence_from_mapping(call_type, date_str) or {}
+    config = load_call_config(meeting_dir)
+    parent_config = config.get("parent") if isinstance(config.get("parent"), dict) else {}
 
-    issue_number = occurrence.get('issue_number')
-    if not issue_number:
-        print(f"No issue number in mapping for {call_type} on {date_str}")
-        return False
+    agenda_issue = (
+        occurrence.get('issue_number')
+        or config.get("issue")
+        or parent_config.get("issue")
+    )
+    meeting_title = (
+        occurrence.get('issue_title')
+        or config.get("meetingTitle")
+        or config.get("name")
+    )
 
-    # Get meeting title from occurrence
-    meeting_title = occurrence.get('issue_title')
     if meeting_title:
         print(f"Meeting title: {meeting_title}")
 
     # Fetch agenda from GitHub
-    print(f"Fetching agenda from GitHub issue #{issue_number}...")
-    agenda = fetch_github_issue_agenda(issue_number)
-    if not agenda:
-        print("Could not fetch agenda, proceeding without it")
-        agenda = "(Agenda not available)"
+    agenda = "(Agenda not available)"
+    if agenda_issue:
+        print(f"Fetching agenda from GitHub issue #{agenda_issue}...")
+        agenda = fetch_github_issue_agenda(agenda_issue) or agenda
+        if agenda == "(Agenda not available)":
+            print("Could not fetch agenda, proceeding without it")
+    else:
+        print("No agenda issue available, proceeding without agenda context")
 
     # Load prompt
     if not prompt_file.exists():
