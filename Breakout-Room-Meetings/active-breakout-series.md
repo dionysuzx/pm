@@ -3,21 +3,20 @@
 This table is automatically updated based on issues in the ethereum/pm repo.
 A breakout is considered "active" if it has a meeting date within the past 3 months.
 
-*Last updated: 2026-10-12 16:23 UTC (updated weekly)*
+*Last updated: 2026-10-19 14:15 UTC (updated weekly)*
 
 | Call Series | Facilitator | Latest | Issue |
 |-------------|-------------|--------|-------|
-| All Wallet Devs | [@SamWilsn](https://github.com/SamWilsn) | 2026-07-15 | [Link](https://github.com/ethereum/pm/issues/2139) |
 | EIP Editing Office Hour | [@poojaranjan](https://github.com/poojaranjan) | 2026-10-14 | [Link](https://github.com/ethereum/pm/issues/2270) |
 | EIPIP Meeting | [@poojaranjan](https://github.com/poojaranjan) | 2026-10-21 | [Link](https://github.com/ethereum/pm/issues/2231) |
 | Encrypt the Mempool | [@jflo](https://github.com/jflo) | 2026-10-14 | [Link](https://github.com/ethereum/pm/issues/2240) |
 | Fast Confirmation Rule | [@mkalinin](https://github.com/mkalinin) | 2026-08-04 | [Link](https://github.com/ethereum/pm/issues/2167) |
 | FOCIL Breakout | [@jihoonsong](https://github.com/jihoonsong) | 2026-10-13 | [Link](https://github.com/ethereum/pm/issues/2268) |
 | L1-zkEVM Breakout | [@jsign](https://github.com/jsign) | 2026-10-14 | [Link](https://github.com/ethereum/pm/issues/2269) |
-| P2P Networking | [@kamilsa](https://github.com/kamilsa) | 2026-10-07 | [Link](https://github.com/ethereum/pm/issues/2262) |
+| P2P Networking | [@kamilsa](https://github.com/kamilsa) | 2026-10-21 | [Link](https://github.com/ethereum/pm/issues/2274) |
 | PQ Interop | [@tcoratger](https://github.com/tcoratger) | 2026-07-29 | [Link](https://github.com/ethereum/pm/issues/2176) |
 | PQ Transaction Signatures | [@asanso](https://github.com/asanso) | 2026-09-30 | [Link](https://github.com/ethereum/pm/issues/2236) |
-| RPC Standards | [@bomanaps](https://github.com/bomanaps) | 2026-10-05 | [Link](https://github.com/ethereum/pm/issues/2258) |
+| RPC Standards | [@bomanaps](https://github.com/bomanaps) | 2026-10-19 | [Link](https://github.com/ethereum/pm/issues/2277) |
 
 ## Inactive Series
 
